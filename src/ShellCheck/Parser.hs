@@ -974,10 +974,24 @@ prop_readAnnotation4 = isWarning readAnnotation "# shellcheck cats=dogs disable=
 prop_readAnnotation5 = isOk readAnnotation "# shellcheck disable=SC2002 # All cats are precious\n"
 prop_readAnnotation6 = isOk readAnnotation "# shellcheck disable=SC1234 # shellcheck foo=bar\n"
 prop_readAnnotation7 = isOk readAnnotation "# shellcheck disable=SC1000,SC2000-SC3000,SC1001\n"
+
+-- !!PDS: Is this correct?
+prop_readAnnotation8 = isOk readAnnotation "# shellcheck line=1234\n"
+prop_readAnnotation9 = isOk readAnnotation "# shellcheck line=1234 eric.h\n"
+prop_readAnnotation10 = isWarning readAnnotation "# shellcheck line=somewhere.txt\n"
+prop_readAnnotation11 = isWarning readAnnotation "# shellcheck line=elsewhere.sh 5432\n"
+prop_readAnnotation12 = isWarning readAnnotation "# shellcheck line=what.txt else.dat\n"
+prop_readAnnotation13 = isWarning readAnnotation "# shellcheck line=7654 5432\n"
+prop_readAnnotation14 = isWarning readAnnotation "# shellcheck rats=rodents line=7654 change.all\n"
+
 readAnnotation = called "shellcheck directive" $ do
     try readAnnotationPrefix
     many1 linewhitespace
     readAnnotationWithoutPrefix
+
+-- !!PDS
+-- Function that takes no arguments.
+-- We are not using guards.
 
 readAnnotationWithoutPrefix = do
     values <- many1 readKey
@@ -988,13 +1002,19 @@ readAnnotationWithoutPrefix = do
         void linefeed <|> eof
     many linewhitespace
     return $ concat values
+
+  -- !!PDS: This populates stuff that is then used above here.
+  --        For example it sets readKey!
+  --        So presumably do...where is a Haskell block.
   where
     readKey = do
         keyPos <- getPosition
         key <- many1 (letter <|> char '-')
         char '=' <|> fail "Expected '=' after directive key"
+        -- !!PDS: 'case' processing.
         annotations <- case key of
             "disable" -> readRange `sepBy` char ','
+              -- !!PDS: But we are also adding 'where' to this
               where
                 readRange = do
                     from <- readCode
@@ -1004,6 +1024,15 @@ readAnnotationWithoutPrefix = do
                     optional $ string "SC"
                     int <- many1 digit
                     return $ read int
+
+
+-- !!PDS
+-- `sepby` is a function and this is equivalent to:
+--    sepby readName char ','
+-- Return a list of things from readName separated by ','.
+-- Note also that "char ','" is also a function call so there are only 2
+-- parameters to "sepBy".
+-- Enables optional checks.
 
             "enable" -> readName `sepBy` char ','
               where
@@ -1024,6 +1053,16 @@ readAnnotationWithoutPrefix = do
                     parseNoteAt pos ErrorC 1103
                         "This shell type is unknown. Use e.g. sh or bash."
                 return [ShellOverride shell]
+
+-- !!PDS: How do we expand these?
+            "line" -> lineNo
+                lineNo
+                ??????????
+                return [LineOverride line]
+
+            "line" -> lineNo fileName
+                ??????????
+                return [FileAndLineOverride line file]
 
             _ -> do
                 parseNoteAt keyPos WarningC 1107 "This directive is unknown. It will be ignored."
@@ -2222,6 +2261,8 @@ readPipeline = do
       <|>
         readPipeSequence
 
+-- !!PDS: What are we doing here?  what is a readAndOr?
+
 prop_readAndOr = isOk readAndOr "grep -i lol foo || exit 1"
 prop_readAndOr1 = isOk readAndOr "# shellcheck disable=1\nfoo"
 prop_readAndOr2 = isOk readAndOr "# shellcheck disable=1\n# lol\n# shellcheck disable=3\nfoo"
@@ -3178,6 +3219,9 @@ readScriptFile sourced = do
     let (T_Literal _ shebangString) = shebang
     allspacing
     annotationStart <- startSpan
+
+-- !!PDS: We're reading a file here and apparently annotations in some how?
+
     fileAnnotations <- readAnnotations
     rcAnnotations <- if sourced
                      then return []

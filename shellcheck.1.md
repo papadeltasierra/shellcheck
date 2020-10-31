@@ -239,6 +239,10 @@ Valid keys are:
 :   Enable an optional check by name, as listed with **--list-optional**.
     Only file-wide `enable` directives are considered.
 
+!!PDS: We want to define "shellcheck line" here.
+!!PDS: There is a Wiki page on GitHub which is out of date and does not
+       describe all these directives.
+
 **source**
 :   Overrides the filename included by a `source`/`.` statement. This can be
     used to tell shellcheck where to look for a file whose name is determined
