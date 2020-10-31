@@ -1013,13 +1013,17 @@ readAnnotationWithoutPrefix = do
         char '=' <|> fail "Expected '=' after directive key"
         -- !!PDS: 'case' processing.
         annotations <- case key of
+            -- !!PDS: Remember that "sepBy" returns a list so this makes
+            --        the return type here consistent with, say, "source".
             "disable" -> readRange `sepBy` char ','
               -- !!PDS: But we are also adding 'where' to this
               where
+                -- !!PDS: readRange feed upwards to create the list.
                 readRange = do
                     from <- readCode
                     to <- choice [ char '-' *> readCode, return $ from+1 ]
                     return $ DisableComment from to
+                -- !!PDS: readCode feeds upwards to readRange processing.
                 readCode = do
                     optional $ string "SC"
                     int <- many1 digit
@@ -1054,15 +1058,25 @@ readAnnotationWithoutPrefix = do
                         "This shell type is unknown. Use e.g. sh or bash."
                 return [ShellOverride shell]
 
--- !!PDS: How do we expand these?
-            "line" -> lineNo
-                lineNo
-                ??????????
-                return [LineOverride line]
-
-            "line" -> lineNo fileName
-                ??????????
-                return [FileAndLineOverride line file]
+-- !!PDS: How do we expand these?  We have to permit lists of directives
+--        such as...
+--        shellcheck line 1234,eric.h disable=SC1234
+--        ...so this limits our syntax.  Note that "source" does not handle
+--        filenames with spaces so we won't either.
+            "line" -> do
+                -- Read the "<line>[,<filename>]" and then split based on the
+                -- presence, or not, of a comma.
+                lineAndFile <- many1 $ noneOf " \n" `sepBy` char ','
+                line = head lineAndFile
+                case length lineAndFilename
+                    1 -> do
+                        return [ LineOverride head lineAndFile Nothing]
+                    2 -> do
+                        return [ LineOverride head lineAndFile tail lineAndFile]
+                    _ -> do
+                        -- !!PDS: Probably need a new number here.
+                        parseNoteAt pos ErrorC 1103
+                            "invalid 'shellcheck line' syntax.."
 
             _ -> do
                 parseNoteAt keyPos WarningC 1107 "This directive is unknown. It will be ignored."
