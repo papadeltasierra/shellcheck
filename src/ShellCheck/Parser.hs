@@ -993,6 +993,9 @@ readAnnotation = called "shellcheck directive" $ do
 -- Function that takes no arguments.
 -- We are not using guards.
 
+-- !!PDS Presumably these annotations are read at any time in the processing
+--       and then somehow have meaning.  Might be worth following 'enable'
+--       processing as it must have stored state somehow.
 readAnnotationWithoutPrefix = do
     values <- many1 readKey
     optional readAnyComment
@@ -1067,8 +1070,7 @@ readAnnotationWithoutPrefix = do
                 -- Read the "<line>[,<filename>]" and then split based on the
                 -- presence, or not, of a comma.
                 lineAndFile <- many1 $ noneOf " \n" `sepBy` char ','
-                line = head lineAndFile
-                case length lineAndFilename
+                case length lineAndFile
                     1 -> do
                         return [ LineOverride head lineAndFile Nothing]
                     2 -> do

@@ -896,6 +896,9 @@ whenShell l c = do
     params <- ask
     when (shellType params `elem` l ) c
 
+-- !!PDS: Looks like this takes shellcheck output and then filters based on
+--        disble etc.  So we're filtering here but not reporting the errors
+--        here.
 
 filterByAnnotation asSpec params =
     filter (not . shouldIgnore)
