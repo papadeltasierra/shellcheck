@@ -974,15 +974,17 @@ prop_readAnnotation4 = isWarning readAnnotation "# shellcheck cats=dogs disable=
 prop_readAnnotation5 = isOk readAnnotation "# shellcheck disable=SC2002 # All cats are precious\n"
 prop_readAnnotation6 = isOk readAnnotation "# shellcheck disable=SC1234 # shellcheck foo=bar\n"
 prop_readAnnotation7 = isOk readAnnotation "# shellcheck disable=SC1000,SC2000-SC3000,SC1001\n"
-
 -- !!PDS: Is this correct?
+-- Note that we are not catching errors here.
 prop_readAnnotation8 = isOk readAnnotation "# shellcheck line=1234\n"
-prop_readAnnotation9 = isOk readAnnotation "# shellcheck line=1234 eric.h\n"
-prop_readAnnotation10 = isWarning readAnnotation "# shellcheck line=somewhere.txt\n"
-prop_readAnnotation11 = isWarning readAnnotation "# shellcheck line=elsewhere.sh 5432\n"
-prop_readAnnotation12 = isWarning readAnnotation "# shellcheck line=what.txt else.dat\n"
-prop_readAnnotation13 = isWarning readAnnotation "# shellcheck line=7654 5432\n"
-prop_readAnnotation14 = isWarning readAnnotation "# shellcheck rats=rodents line=7654 change.all\n"
+prop_readAnnotation9 = isOk readAnnotation "# shellcheck line=1234,eric.h\n"
+prop_readAnnotation10 = isOk readAnnotation "# shellcheck line\n"
+prop_readAnnotation20 = isWarning readAnnotation "# shellcheck line\n"
+prop_readAnnotation30 = isNotOk readAnnotation "# shellcheck line\n"
+prop_readAnnotation11 = isNotOk readAnnotation "# shellcheck line=\n"
+prop_readAnnotation12 = isNotOk readAnnotation "# shellcheck line=eric.h\n"
+prop_readAnnotation13 = isNotOk readAnnotation "# shellcheck line=eric.h,1234\n"
+prop_readAnnotation14 = isNotOk readAnnotation "# shellcheck line=1234,eric.h,extra\n"
 
 readAnnotation = called "shellcheck directive" $ do
     try readAnnotationPrefix
@@ -1070,7 +1072,7 @@ readAnnotationWithoutPrefix = do
                 -- Read the "<line>[,<filename>]" and then split based on the
                 -- presence, or not, of a comma.
                 pos <- getPosition
-                lineAndFile <- many1 $ noneOf " \n" `sepBy` char ','
+                lineAndFile <- (many1 $ noneOf " \n") `sepBy` char ','
                 case length lineAndFile of
                     1 -> do
                         let lineNo = read (head lineAndFile)
