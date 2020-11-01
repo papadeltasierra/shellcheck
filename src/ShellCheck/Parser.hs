@@ -1069,8 +1069,9 @@ readAnnotationWithoutPrefix = do
             "line" -> do
                 -- Read the "<line>[,<filename>]" and then split based on the
                 -- presence, or not, of a comma.
+                pos <- getPosition
                 lineAndFile <- many1 $ noneOf " \n" `sepBy` char ','
-                case length lineAndFile
+                case length lineAndFile of
                     1 -> do
                         return [ LineOverride head lineAndFile Nothing]
                     2 -> do
