@@ -1073,13 +1073,17 @@ readAnnotationWithoutPrefix = do
                 lineAndFile <- many1 $ noneOf " \n" `sepBy` char ','
                 case length lineAndFile of
                     1 -> do
-                        return [ LineOverride head lineAndFile Nothing]
+                        let lineNo = read (head lineAndFile)
+                        return [LineOverride lineNo Nothing]
                     2 -> do
-                        return [ LineOverride head lineAndFile tail lineAndFile]
+                        let lineNo = read (head lineAndFile)
+                        let filename = Just(last lineAndFile)
+                        return [LineOverride lineNo filename]
                     _ -> do
                         -- !!PDS: Probably need a new number here.
                         parseNoteAt pos ErrorC 1103
                             "invalid 'shellcheck line' syntax.."
+                        return []
 
             _ -> do
                 parseNoteAt keyPos WarningC 1107 "This directive is unknown. It will be ignored."

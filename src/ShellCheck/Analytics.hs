@@ -94,8 +94,8 @@ getEnableDirectives root =
 checkList l t = concatMap (\f -> f t) l
 
 -- !!PDS: Aha, so we parse the shells and then run shellcheck against the AST
-          which means that the shellcheck directives are presumably part of
-          the AST?  Or perhaps hooked into it?
+--        which means that the shellcheck directives are presumably part of
+--        the AST?  Or perhaps hooked into it?
 
 -- Checks that are run on each node in the AST
 runNodeAnalysis f p t = execWriter (doAnalysis (f p) t)
