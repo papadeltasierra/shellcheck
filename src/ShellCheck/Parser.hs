@@ -27,6 +27,7 @@ import ShellCheck.AST
 import ShellCheck.ASTLib
 import ShellCheck.Data
 import ShellCheck.Interface
+import ShellCheck.Regex
 
 import Control.Applicative ((<*), (*>))
 import Control.Monad
@@ -962,6 +963,42 @@ readCondition = called "test expression" $ do
     many readCmdWord -- Read and throw away remainders to get then/do warnings. Fixme?
     return $ T_Condition id typ condition
 
+pdsTest1 :: String -> Maybe String -> SourcePos -> Maybe String
+pdsTest1 l f pos = do 
+    let noddy = "1234"
+    return noddy
+
+pdsTest2 :: String -> Maybe String -> SourcePos -> Maybe String
+pdsTest2 l f pos = do 
+    return "1234"
+
+-- Same as 'try' but emit syntax errors if the parse fails.
+pdsTest3 :: String -> Maybe String -> SourcePos -> Annotation
+pdsTest3 l f pos =
+    -- return [LineOverride (read (head m) :: Integer) f]
+    LineOverride (read l :: Int) f
+
+-- Same as 'try' but emit syntax errors if the parse fails.
+lineLineAndFileX :: String -> Maybe String -> SourcePos -> [Annotation]
+lineLineAndFileX l f pos = do
+    [LineOverride (read l :: Int) f]
+
+-- Same as 'try' but emit syntax errors if the parse fails.
+lineLineAndFile :: String -> Maybe String -> SourcePos -> [Annotation]
+lineLineAndFile l f pos = do
+    x <- case (matchRegex (mkRegex "([[:digit:]]+)") l) of
+        Nothing -> do
+            parseNoteAt pos ErrorC 1103
+                "'shellcheck line' directive takes line[,filename] argument(s)."
+            let x = []
+            return x
+        
+        Just m -> 
+            return [LineOverride (read (head m) :: Int) f]
+
+    x
+
+
 readAnnotationPrefix = do
     char '#'
     many linewhitespace
@@ -974,25 +1011,24 @@ prop_readAnnotation4 = isWarning readAnnotation "# shellcheck cats=dogs disable=
 prop_readAnnotation5 = isOk readAnnotation "# shellcheck disable=SC2002 # All cats are precious\n"
 prop_readAnnotation6 = isOk readAnnotation "# shellcheck disable=SC1234 # shellcheck foo=bar\n"
 prop_readAnnotation7 = isOk readAnnotation "# shellcheck disable=SC1000,SC2000-SC3000,SC1001\n"
--- !!PDS: Is this correct?
 prop_readAnnotation8 = isOk readAnnotation "# shellcheck line=1234\n"
-prop_readAnnotation9 = isOk readAnnotation "# shellcheck line=1234,eric.h\n"
--- We need to sort these because many of these results are not correct!
--- prop_readAnnotation10 = isOk readAnnotation "# shellcheck line\n"
--- prop_readAnnotation20 = isWarning readAnnotation "# shellcheck line\n"
+-- Note that "5678" could be the name of a file!
+prop_readAnnotation9 = isOk readAnnotation "# shellcheck line=1234,5678\n"
 prop_readAnnotation30 = isNotOk readAnnotation "# shellcheck line\n"
--- prop_readAnnotation11 = isOk readAnnotation "# shellcheck line=\n"
-prop_readAnnotation12 = isOk readAnnotation "# shellcheck line=eric.h\n"
-prop_readAnnotation13 = isOk readAnnotation "# shellcheck line=eric.h,1234\n"
-prop_readAnnotation14 = isOk readAnnotation "# shellcheck line=1234,eric.h,extra\n"
 prop_readAnnotation21 = isWarning readAnnotation "# shellcheck line=\n"
+
+-- !!PDS: These are currently wrong.
+-- prop_readAnnotation12 = isOk readAnnotation "# shellcheck line=eric.h\n"
 -- prop_readAnnotation22 = isWarning readAnnotation "# shellcheck line=eric.h\n"
+prop_readAnnotation32 = isNotOk readAnnotation "# shellcheck line=eric.h\n"
+
+-- prop_readAnnotation13 = isOk readAnnotation "# shellcheck line=eric.h,1234\n"
 -- prop_readAnnotation23 = isWarning readAnnotation "# shellcheck line=eric.h,1234\n"
+prop_readAnnotation33 = isNotOk readAnnotation "# shellcheck line=eric.h,1234\n"
+
 -- prop_readAnnotation24 = isWarning readAnnotation "# shellcheck line=1234,eric.h,extra\n"
--- prop_readAnnotation31 = isNotOk readAnnotation "# shellcheck line=\n"
--- prop_readAnnotation32 = isNotOk readAnnotation "# shellcheck line=eric.h\n"
--- prop_readAnnotation33 = isNotOk readAnnotation "# shellcheck line=eric.h,1234\n"
--- prop_readAnnotation34 = isNotOk readAnnotation "# shellcheck line=1234,eric.h,extra\n"
+-- prop_readAnnotation14 = isOk readAnnotation "# shellcheck line=1234,eric.h,extra\n"
+prop_readAnnotation34 = isNotOk readAnnotation "# shellcheck line=1234,eric.h,extra\n"
 
 readAnnotation = called "shellcheck directive" $ do
     try readAnnotationPrefix
@@ -1042,7 +1078,6 @@ readAnnotationWithoutPrefix = do
                     int <- many1 digit
                     return $ read int
 
-
 -- !!PDS
 -- `sepby` is a function and this is equivalent to:
 --    sepby readName char ','
@@ -1081,19 +1116,20 @@ readAnnotationWithoutPrefix = do
                 -- presence, or not, of a comma.
                 pos <- getPosition
                 lineAndFile <- (many1 $ noneOf " \n") `sepBy` char ','
-                case length lineAndFile of
-                    1 -> do
-                        let lineNo = read (head lineAndFile)
-                        return [LineOverride lineNo Nothing]
+                x <- case length lineAndFile of
                     2 -> do
-                        let lineNo = read (head lineAndFile)
-                        let filename = Just(last lineAndFile)
-                        return [LineOverride lineNo filename]
+                        return (lineLineAndFile (head lineAndFile) (Just (last lineAndFile)) pos)
+
+                    1 -> do
+                        return (lineLineAndFile (head lineAndFile) Nothing pos)
+
                     _ -> do
-                        -- !!PDS: Probably need a new number here.
                         parseNoteAt pos ErrorC 1103
-                            "invalid 'shellcheck line' syntax.."
+                            "'shellcheck line' directive takes line[,filename] argument(s)."
                         return []
+                return x
+
+
 
             _ -> do
                 parseNoteAt keyPos WarningC 1107 "This directive is unknown. It will be ignored."
