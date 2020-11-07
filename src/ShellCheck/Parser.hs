@@ -986,12 +986,12 @@ lineLineAndFileX l f pos = do
 -- Same as 'try' but emit syntax errors if the parse fails.
 lineLineAndFile :: String -> Maybe String -> SourcePos -> [Annotation]
 lineLineAndFile l f pos = do
-    x <- case (matchRegex (mkRegex "([[:digit:]]+)") l) of
+    x <- case matchRegex (mkRegex "([[:digit:]]+)") l of
+
         Nothing -> do
-            parseNoteAt pos ErrorC 1103
-                "'shellcheck line' directive takes line[,filename] argument(s)."
             let x = []
-            return x
+            $ parseNoteAt pos ErrorC 1103 "shellcheck line directive takes line[,filename] argument(s)."
+            return $ x
         
         Just m -> 
             return [LineOverride (read (head m) :: Int) f]
