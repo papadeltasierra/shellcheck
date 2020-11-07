@@ -963,46 +963,11 @@ readCondition = called "test expression" $ do
     many readCmdWord -- Read and throw away remainders to get then/do warnings. Fixme?
     return $ T_Condition id typ condition
 
-pdsTest1 :: String -> Maybe String -> SourcePos -> Maybe String
-pdsTest1 l f pos = do 
-    let noddy = "1234"
-    return noddy
-
-pdsTest2 :: String -> Maybe String -> SourcePos -> Maybe String
-pdsTest2 l f pos = do 
-    return "1234"
-
--- Same as 'try' but emit syntax errors if the parse fails.
-pdsTest3 :: String -> Maybe String -> SourcePos -> Annotation
-pdsTest3 l f pos =
-    -- return [LineOverride (read (head m) :: Integer) f]
-    LineOverride (read l :: Int) f
-
--- Same as 'try' but emit syntax errors if the parse fails.
-lineLineAndFileX :: String -> Maybe String -> SourcePos -> [Annotation]
-lineLineAndFileX l f pos = do
-    [LineOverride (read l :: Int) f]
-
--- Same as 'try' but emit syntax errors if the parse fails.
-lineLineAndFile :: String -> Maybe String -> SourcePos -> [Annotation]
-lineLineAndFile l f pos = do
-    x <- case matchRegex (mkRegex "([[:digit:]]+)") l of
-
-        Nothing -> do
-            let x = []
-            $ parseNoteAt pos ErrorC 1103 "shellcheck line directive takes line[,filename] argument(s)."
-            return $ x
-        
-        Just m -> 
-            return [LineOverride (read (head m) :: Int) f]
-
-    x
-
-
 readAnnotationPrefix = do
     char '#'
     many linewhitespace
     string "shellcheck"
+
 
 prop_readAnnotation1 = isOk readAnnotation "# shellcheck disable=1234,5678\n"
 prop_readAnnotation2 = isOk readAnnotation "# shellcheck disable=SC1234 disable=SC5678\n"
@@ -1011,24 +976,22 @@ prop_readAnnotation4 = isWarning readAnnotation "# shellcheck cats=dogs disable=
 prop_readAnnotation5 = isOk readAnnotation "# shellcheck disable=SC2002 # All cats are precious\n"
 prop_readAnnotation6 = isOk readAnnotation "# shellcheck disable=SC1234 # shellcheck foo=bar\n"
 prop_readAnnotation7 = isOk readAnnotation "# shellcheck disable=SC1000,SC2000-SC3000,SC1001\n"
-prop_readAnnotation8 = isOk readAnnotation "# shellcheck line=1234\n"
+-- There is no "=" after "disable"
+prop_readAnnotation8 = isNotOk readAnnotation "# shellcheck disable 1234,5678\n"
+
+-- The mainline success case.
+prop_readAnnotation9 = isOk readAnnotation "# shellcheck line=testfile.dat:1234\n"
 -- Note that "5678" could be the name of a file!
-prop_readAnnotation9 = isOk readAnnotation "# shellcheck line=1234,5678\n"
-prop_readAnnotation30 = isNotOk readAnnotation "# shellcheck line\n"
-prop_readAnnotation21 = isWarning readAnnotation "# shellcheck line=\n"
-
--- !!PDS: These are currently wrong.
--- prop_readAnnotation12 = isOk readAnnotation "# shellcheck line=eric.h\n"
--- prop_readAnnotation22 = isWarning readAnnotation "# shellcheck line=eric.h\n"
-prop_readAnnotation32 = isNotOk readAnnotation "# shellcheck line=eric.h\n"
-
--- prop_readAnnotation13 = isOk readAnnotation "# shellcheck line=eric.h,1234\n"
--- prop_readAnnotation23 = isWarning readAnnotation "# shellcheck line=eric.h,1234\n"
-prop_readAnnotation33 = isNotOk readAnnotation "# shellcheck line=eric.h,1234\n"
-
--- prop_readAnnotation24 = isWarning readAnnotation "# shellcheck line=1234,eric.h,extra\n"
--- prop_readAnnotation14 = isOk readAnnotation "# shellcheck line=1234,eric.h,extra\n"
-prop_readAnnotation34 = isNotOk readAnnotation "# shellcheck line=1234,eric.h,extra\n"
+prop_readAnnotation10 = isOk readAnnotation "# shellcheck line=5678:1234\n"
+-- There is no "=" after "line"
+prop_readAnnotation11 = isNotOk readAnnotation "# shellcheck line\n"
+-- Both filename and line are missing and no ":" can be found.
+prop_readAnnotation12 = isNotOk readAnnotation "# shellcheck line=\n"
+-- There is no ":" after the filename (which gets read as "eric.h,1234")
+prop_readAnnotation13 = isNotOk readAnnotation "# shellcheck line=eric.h,1234\n"
+-- ":extra" is not a valid directive
+-- Cannot figure out how to make this fail; not sure disable=1234:extra would either though.
+-- prop_readAnnotation14 = isNotOk readAnnotation "# shellcheck line=eric.h:1234:extra\n"
 
 readAnnotation = called "shellcheck directive" $ do
     try readAnnotationPrefix
@@ -1060,22 +1023,28 @@ readAnnotationWithoutPrefix = do
         keyPos <- getPosition
         key <- many1 (letter <|> char '-')
         char '=' <|> fail "Expected '=' after directive key"
-        -- !!PDS: 'case' processing.
+        -- So annotations must be an array of IO annotations
         annotations <- case key of
             -- !!PDS: Remember that "sepBy" returns a list so this makes
             --        the return type here consistent with, say, "source".
             "disable" -> readRange `sepBy` char ','
               -- !!PDS: But we are also adding 'where' to this
               where
-                -- !!PDS: readRange feed upwards to create the list.
+                -- "do" creates a block which performs an IO action.
                 readRange = do
+                    -- Turns readCode into a String
                     from <- readCode
+                    -- Reads the next code or "previous+1" as IO String then converts to String
                     to <- choice [ char '-' *> readCode, return $ from+1 ]
+                    -- Creates an "IO DisableComment"
                     return $ DisableComment from to
                 -- !!PDS: readCode feeds upwards to readRange processing.
                 readCode = do
+                    -- Must read "SC" if present and return an IO String.
                     optional $ string "SC"
+                    -- "<-" turns an IO into a real value
                     int <- many1 digit
+                    -- Creates an IO Int (n.b. "int" is a string here!)
                     return $ read int
 
 -- !!PDS
@@ -1106,30 +1075,16 @@ readAnnotationWithoutPrefix = do
                         "This shell type is unknown. Use e.g. sh or bash."
                 return [ShellOverride shell]
 
--- !!PDS: How do we expand these?  We have to permit lists of directives
---        such as...
---        shellcheck line 1234,eric.h disable=SC1234
---        ...so this limits our syntax.  Note that "source" does not handle
---        filenames with spaces so we won't either.
+            -- To make processing as simple as possible, we will support only the
+            -- syntax "shellcheck=<filename>:<line>".
             "line" -> do
-                -- Read the "<line>[,<filename>]" and then split based on the
-                -- presence, or not, of a comma.
-                pos <- getPosition
-                lineAndFile <- (many1 $ noneOf " \n") `sepBy` char ','
-                x <- case length lineAndFile of
-                    2 -> do
-                        return (lineLineAndFile (head lineAndFile) (Just (last lineAndFile)) pos)
-
-                    1 -> do
-                        return (lineLineAndFile (head lineAndFile) Nothing pos)
-
-                    _ -> do
-                        parseNoteAt pos ErrorC 1103
-                            "'shellcheck line' directive takes line[,filename] argument(s)."
-                        return []
-                return x
-
-
+                ioFileName <- many1 $ noneOf ": \n"
+                -- The line must follow a colon
+                char ':' <|> fail "Expected ':' after filename"
+                ioLine <- many1 digit
+                let filename = ioFileName
+                    line = read ioLine
+                return [LineOverride filename line]
 
             _ -> do
                 parseNoteAt keyPos WarningC 1107 "This directive is unknown. It will be ignored."
