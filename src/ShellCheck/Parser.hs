@@ -51,6 +51,7 @@ import qualified Data.Map as Map
 
 import Test.QuickCheck.All (quickCheckAll)
 
+-- !!PDS: See above - Control.Monad.Reader and Control.Monad.State, MR and MS.
 type SCBase m = Mr.ReaderT (Environment m) (Ms.StateT SystemState m)
 type SCParser m v = ParsecT String UserState (SCBase m) v
 
@@ -137,6 +138,9 @@ almostSpace =
         parseNote ErrorC 1018 $ "This is a " ++ name ++ ". Delete and retype it."
         char c
         return ' '
+
+-- !!PDS: Apparently the ParseResult contains a list of ParseNote.s
+--        So we need to hook where ParseNote.s get created.
 
 --------- Message/position annotation on top of user state
 data ParseNote = ParseNote SourcePos SourcePos Severity Code String deriving (Show, Eq)
@@ -257,9 +261,17 @@ ignoreProblemsOf p = do
     systemState <- lift . lift $ Ms.get
     p <* (lift . lift . Ms.put $ systemState)
 
+-- !!PDS: Named here and in Analyzer but this should be the one relevant
+--        to parsing.
 shouldIgnoreCode code = do
     context <- getCurrentContexts
     checkSourced <- Mr.asks checkSourced
+    -- !!PDS: If any of the entries in list "context" satisfy the condition
+    --        (contextItemDisablesCode checkSources code) then this returns
+    --        True.
+    --        This is not quite what we want for "line".  We want "line" to be
+    --        associated with a file and probably to add an index and change
+    --        the filename.  But how do we add these in?
     return $ any (contextItemDisablesCode checkSourced code) context
 
 -- Does this item on the context stack disable warnings for 'code'?
@@ -268,9 +280,12 @@ contextItemDisablesCode alsoCheckSourced code = disabling alsoCheckSourced
   where
     disabling checkSourced item =
         case item of
+            -- !!PDS: Apparently we have a list of contexts where a
+            --        Context is either a ContextSource or a ContextAnnotation.
             ContextAnnotation list -> any disabling' list
             ContextSource _ -> not $ checkSourced
             _ -> False
+    -- !!PDS Ooo, look, a DisableComment.
     disabling' (DisableComment n m) = code >= n && code < m
     disabling' _ = False
 
@@ -316,6 +331,9 @@ getSourceOverride = do
 
 -- Store potential parse problems outside of parsec
 
+-- !!PDS: From the below it looks line ParseNote does the heavy lifting.
+
+-- !!PDS: OK, SystemState and not ParseResult it appears.
 data SystemState = SystemState {
     contextStack :: [Context],
     parseProblems :: [ParseNote]
@@ -354,12 +372,16 @@ pushContext c = do
     setCurrentContexts (c:v)
 
 parseProblemAtWithEnd start end level code msg = do
+    -- !!PDS: This must be the filtering that causes problems to be ignored.
     irrelevant <- shouldIgnoreCode code
     unless irrelevant $
         addParseProblem note
   where
+    -- !!PDS: This needs to somehow take account of the current name.
+    --        But how does it get old of state?
     note = ParseNote start end level code msg
 
+-- !!PDS: So this adds a note to the problems
 addParseProblem note =
     Ms.modify (\state -> state {
         parseProblems = note:parseProblems state
@@ -3418,6 +3440,7 @@ runParser :: Monad m =>
     m (Either ParseError v, SystemState)
 
 runParser env p filename contents =
+    -- !!PDS This launches the parser with new system-state.
     Ms.runStateT
         (Mr.runReaderT
             (runParserT p initialUserState filename contents)

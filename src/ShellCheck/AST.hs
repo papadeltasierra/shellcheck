@@ -150,7 +150,6 @@ data Annotation =
     | SourceOverride String
     | ShellOverride String
     | SourcePath String
--- !!PDS: Sure about this?  what does 'deriving' do?
     | LineOverride String Int
     deriving (Show, Eq)
 data ConditionType = DoubleBracket | SingleBracket deriving (Show, Eq)
