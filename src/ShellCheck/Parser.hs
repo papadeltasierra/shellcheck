@@ -142,6 +142,8 @@ almostSpace =
 -- !!PDS: Apparently the ParseResult contains a list of ParseNote.s
 --        So we need to hook where ParseNote.s get created.
 
+-- !!PDS: Where does the filename come from?
+
 --------- Message/position annotation on top of user state
 data ParseNote = ParseNote SourcePos SourcePos Severity Code String deriving (Show, Eq)
 data Context =
@@ -289,8 +291,6 @@ contextItemDisablesCode alsoCheckSourced code = disabling alsoCheckSourced
     disabling' (DisableComment n m) = code >= n && code < m
     disabling' _ = False
 
-
-
 getCurrentAnnotations includeSource =
     concatMap get . takeWhile (not . isBoundary) <$> getCurrentContexts
   where
@@ -396,6 +396,10 @@ parseProblemAtId id level code msg = do
 
 -- Store non-parse problems inside
 
+-- !!PDS: This is where we find a note to this is might be a good place
+--        to flag an error.  However I think the context might be carrying
+--        the filename so how do we sort this?  Do we need to create a new
+--        context somehow?
 parseNote c l a = do
     pos <- getPosition
     parseNoteAt pos c l a
@@ -1012,8 +1016,12 @@ prop_readAnnotation12 = isNotOk readAnnotation "# shellcheck line=\n"
 -- There is no ":" after the filename (which gets read as "eric.h,1234")
 prop_readAnnotation13 = isNotOk readAnnotation "# shellcheck line=eric.h,1234\n"
 -- ":extra" is not a valid directive
+
 -- Cannot figure out how to make this fail; not sure disable=1234:extra would either though.
 -- prop_readAnnotation14 = isNotOk readAnnotation "# shellcheck line=eric.h:1234:extra\n"
+
+-- It might be useful to just set the line.
+prop_readAnnotation15 = isOk readAnnotation "# shellcheck line=:1234\n"
 
 readAnnotation = called "shellcheck directive" $ do
     try readAnnotationPrefix
@@ -1100,13 +1108,16 @@ readAnnotationWithoutPrefix = do
             -- To make processing as simple as possible, we will support only the
             -- syntax "shellcheck=<filename>:<line>".
             "line" -> do
-                ioFileName <- many1 $ noneOf ": \n"
+                pos <- getPosition
+                -- Note we are allowing no filename here, meaning just use the current filename
+                -- or whatever the previous shellcheck line directive set.
+                ioFileName <- many $ noneOf ": \n"
                 -- The line must follow a colon
                 char ':' <|> fail "Expected ':' after filename"
                 ioLine <- many1 digit
-                let filename = ioFileName
-                    line = read ioLine
-                return [LineOverride filename line]
+                let fileName = ioFileName
+                    line = read ioLine - sourceLine(keyPos)
+                return [LineOverride fileName line]
 
             _ -> do
                 parseNoteAt keyPos WarningC 1107 "This directive is unknown. It will be ignored."
