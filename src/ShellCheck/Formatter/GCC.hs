@@ -42,6 +42,8 @@ outputAll cr sys = mapM_ f groups
     groups = groupWith sourceFile comments
     f :: [PositionedComment] -> IO ()
     f group = do
+        -- !!PDS Source of filename.  Follow sourceFile
+        --       sourceFile is globalbut if so, how does it ever change?
         let filename = sourceFile (head group)
         result <- (siReadFile sys) filename
         let contents = either (const "") id result

@@ -37,6 +37,7 @@ data Formatter = Formatter {
     footer :: IO ()
 }
 
+-- !!PDS: synonymn so what do pcStartPost and posFile/Line do?
 sourceFile = posFile . pcStartPos
 lineNo = posLine . pcStartPos
 endLineNo = posLine . pcEndPos

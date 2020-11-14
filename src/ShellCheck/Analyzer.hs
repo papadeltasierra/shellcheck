@@ -30,6 +30,9 @@ import qualified ShellCheck.Checks.ShellSupport
 
 
 -- TODO: Clean up the cruft this is layered on
+-- !!PDS: We know that the comments created here do NOT contain file/line/column
+--        information so does an AnalyisResult?
+--        AnalysisResult is a array of comments so no file/line/column info in that.
 analyzeScript :: AnalysisSpec -> AnalysisResult
 analyzeScript spec = newAnalysisResult {
     arComments =

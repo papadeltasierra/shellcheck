@@ -900,6 +900,10 @@ whenShell l c = do
 --        disble etc.  So we're filtering here but not reporting the errors
 --        here.
 
+-- !!PDS: OK, so if we have the error(s) here, we can alter them based on
+--        our new LineOverride stuff.  But might only have code here, not 
+--        filename or line number :-(.  
+
 filterByAnnotation asSpec params =
     filter (not . shouldIgnore)
   where

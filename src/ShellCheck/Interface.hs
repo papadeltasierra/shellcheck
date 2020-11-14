@@ -222,6 +222,7 @@ data Position = Position {
     posColumn :: Integer  -- 1 based source column, where tabs are 8
 } deriving (Show, Eq, Generic, NFData, Ord)
 
+-- !!PDS: Here is important because this is where we set file, ilne and column.
 newPosition :: Position
 newPosition = Position {
     posFile   = "",

@@ -146,6 +146,8 @@ almostSpace =
 
 --------- Message/position annotation on top of user state
 data ParseNote = ParseNote SourcePos SourcePos Severity Code String deriving (Show, Eq)
+-- !!PDS For "context" think filename.  So we can get the current context then
+--       scna backwards looking for line overrrides.    
 data Context =
         ContextName SourcePos String
         | ContextAnnotation [Annotation]
@@ -1116,8 +1118,8 @@ readAnnotationWithoutPrefix = do
                 char ':' <|> fail "Expected ':' after filename"
                 ioLine <- many1 digit
                 let fileName = ioFileName
-                    line = read ioLine - sourceLine(keyPos)
-                return [LineOverride fileName line]
+                    lineOffset = read ioLine - sourceLine(keyPos)
+                return [LineOverride fileName lineOffset]
 
             _ -> do
                 parseNoteAt keyPos WarningC 1107 "This directive is unknown. It will be ignored."
@@ -3552,6 +3554,9 @@ toPositionedComment (ParseNote start end severity code message) =
       }
     }
 
+-- !!PDS: If we modify the filename and line number here, 
+--        this will probably affect following 'shellcheck line'
+--        statements too, whch would be bad!
 posToPos :: SourcePos -> Position
 posToPos sp = newPosition {
     posFile = sourceName sp,

@@ -37,6 +37,14 @@ import Control.Monad
 
 import Test.QuickCheck.All
 
+-- !!PDS Should we translate here?  Ideally we don't want to walk backwarks
+--       throught he annotations list though.
+--       End position would be:
+--       - [] Empty -- apply none
+--       - LineOverride (apply it)
+--       - SourceOverride  - apply none
+--       But where do we store the annotations?
+--       We need the current Context and then scan for the last LineOverride.
 tokenToPosition startMap t = fromMaybe fail $ do
     span <- Map.lookup (tcId t) startMap
     return $ newPositionedComment {
@@ -77,6 +85,8 @@ checkScript sys spec = do
         }
         let parseMessages = prComments result
         let tokenPositions = prTokenPositions result
+        -- !!PDS: analysiSpec does appear to contain filename and
+        --         presumably line and column.
         let analysisSpec root =
                 as {
                     asScript = root,
@@ -87,10 +97,23 @@ checkScript sys spec = do
                     asTokenPositions = tokenPositions,
                     asOptionalChecks = csOptionalChecks spec
                 } where as = newAnalysisSpec root
+        -- !!PDS: analysisMessages does not contain file/line/column
         let analysisMessages =
                 maybe []
                     (arComments . analyzeScript . analysisSpec)
                         $ prRoot result
+        -- !!PDS: This may be pushing tokens to the analyzer based on filename,
+        --        line, column and then building a thing from them at each
+        --        position.
+        --        If that is the case then we need to allow it to do that, but
+        --        return the "thing" ("comment report") having manipulated the
+        --        filename and line number.
+        --        So we need to hack something where?  In the translator? YES!
+        --        - tokenPositions maps a token ID to a start/end position.
+        --        - tokenToPosition
+        --        But where does the filename come from?  Both start and end positions
+        --        contain the filename!  So tokenToposition sets it up and perhaps
+        --        that is where we should translate?
         let translator = tokenToPosition tokenPositions
         return . nub . sortMessages . filter shouldInclude $
             (parseMessages ++ map translator analysisMessages)

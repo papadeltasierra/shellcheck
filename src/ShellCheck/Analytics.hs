@@ -69,6 +69,8 @@ treeChecks = [
 
 runAnalytics :: AnalysisSpec -> [TokenComment]
 runAnalytics options =
+    -- !!PDS: We know that TokenComments do not contain file, line of column info
+    --        so the caller must provide these!
     runList options treeChecks ++ runList options optionalChecks
   where
     root = asScript options
@@ -873,6 +875,9 @@ checkArrayWithoutIndex params _ =
         return . maybeToList $ do
             name <- getLiteralString token
             assigned <- Map.lookup name map
+            -- !!PDS: "id" is the identity function and "id 2128" will return "2128".  So there is
+            --        NO filename or line number information in a comment!  It contains the 
+            --        severity and the command code and a string and nothing more.
             return $ makeComment WarningC id 2128
                     "Expanding an array without an index only gives the first element."
     readF _ _ _ = return []
