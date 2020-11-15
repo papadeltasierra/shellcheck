@@ -911,8 +911,10 @@ filterByAnnotation asSpec params =
     shouldIgnore note =
         any (shouldIgnoreFor (getCode note)) $
             getPath parents (T_Bang $ tcId note)
+
     shouldIgnoreFor _ T_Include {} = not $ asCheckSourced asSpec
     shouldIgnoreFor code t = isAnnotationIgnoringCode code t
+    
     parents = parentMap params
     getCode = cCode . tcComment
 

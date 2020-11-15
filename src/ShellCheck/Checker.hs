@@ -45,7 +45,7 @@ import Test.QuickCheck.All
 --       - SourceOverride  - apply none
 --       But where do we store the annotations?
 --       We need the current Context and then scan for the last LineOverride.
-tokenToPosition startMap t = fromMaybe fail $ do
+_tokenToPosition startMap t = fromMaybe fail $ do
     span <- Map.lookup (tcId t) startMap
     return $ newPositionedComment {
         pcStartPos = fst span,
@@ -55,6 +55,115 @@ tokenToPosition startMap t = fromMaybe fail $ do
     }
   where
     fail = error "Internal shellcheck error: id doesn't exist. Please report!"
+
+# overridePos:: Position -> Position
+# overridePos rawPos =
+#     newPosition {
+#         posFile = newFile,
+#         posLine = newLine,
+#         posColumn = posLine rawPos
+#     }
+#     where
+#         newFile, newLine = case ???
+#     
+#     case annotation:
+# 
+#         Nothing:
+#         Maybe LineOverride:
+# 
+
+-- !!PDS: See below.  We want to walk up the tree of tokens in the same manner
+--        except that we want to stop at the first LineOverride.  We probably don't
+--        want a filter but if we use recursion, we should be able to stop at the
+--        top OR the first LineOverride that we hit.    
+
+
+__filterByAnnotation asSpec params =
+    -- shouldIgnore returns TRUE to indicate "do filter out" but filter() wants to
+    -- see TRUE to "do keep (NOT filter out)" thus the "not" being applied here.
+    filter (not . shouldIgnore)
+  where  
+    token = asScript asSpec
+    -- See below: "note" is a TokenComment
+    shouldIgnore note =
+        -- PDS: any acts on a list so we take a list and condition
+        --      Condition is should we ignore....
+        -- shouldIgnoreFor returns FALSE except when we decide we WILL filter out.
+        any (shouldIgnoreFor (getCode note)) $ 
+                -- List is this thing, parents?
+                -- Element and all it's parents (because disable works recursively?)
+                        -- From token to parent tokens
+                                          -- Extracting the "token ID" from the note
+                -- So we are checking all the notes for this token and all its parents
+                -- to see if we should show them.
+                getPath parents (T_Bang $ tcId note)
+
+    -- If the TokenComment is an include, off we go.
+    shouldIgnoreFor _ T_Include {} = not $ asCheckSourced asSpec
+    -- It appears that we might have a zero (0) code (so every token has a Comment!)
+                    -- This is the error code e.g. SC2048
+                         -- This is a tag; but why a tag?
+    shouldIgnoreFor code t = isAnnotationIgnoringCode code t
+
+    -- Is this walking the script tree upwards?
+    parents = parentMap params
+
+    -- We're getting the code from a comment?
+    -- "note" must be a TokenComment
+    -- tcComment gets the Comment from a TokenComment
+    -- cCode gets the code from a Comment
+    getCode = cCode . tcComment
+
+# -- !!PDS: Move this to ASTLib.hs later.
+# -- Is this a T_Annotation that ignores a specific code?
+# __isAnnotationOverridingLine fileName line =
+#     case t of
+#         T_Annotation _ anns _ -> overrideLine filename line
+#         _ -> (fileName, line)
+#   where
+#     overrideLine (LineOverride overFileName lineOffset) = (overFileName, line - lineOffset)
+#     overrideLine  _                                     = fileName, line)
+# 
+-- Is this a T_Annotation that ignores a specific code?
+                           -- An error code
+                                -- A token
+__isAnnotationIgnoringCode code t =
+    case t of
+        -- If this is an annotation, see if we are ignoring this code
+        T_Annotation _ anns _ -> any hasNum anns
+        -- If this is not an anntation, we are NOT ignoring this code.
+        _ -> False
+  where
+    -- For a DisableComment, check further
+    hasNum (DisableComment from to) = code >= from && code < to
+    -- For a non DisableComment, we are NOT ignoring
+    hasNum _                   = False
+
+
+
+
+tokenToPosition startMap t = fromMaybe fail $ do
+    span <- Map.lookup (tcId t) startMap
+    return $ newPositionedComment {
+        pcStartPos = startPos,
+        pcEndPos = endPos,
+        pcComment = tcComment t,
+        pcFix = tcFix t
+    }
+  where
+    fail = error "Internal shellcheck error: id doesn't exist. Please report!"
+    startPos = overridePos (fst span)
+    endPos = overridePos (snd span)
+
+
+?????????????
+-- Both pcStartPost and pcEndPos will contain filename and line numbers
+-- so need to be changed/offsetted.  This means we need to create copies
+-- where the filename and line number might be modified.
+-- 
+-- So we need to run through the list...
+
+
 
 shellFromFilename filename = listToMaybe candidates
   where
