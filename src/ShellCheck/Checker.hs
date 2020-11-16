@@ -37,6 +37,32 @@ import Control.Monad
 
 import Test.QuickCheck.All
 
+-- !!PDS: Need to move this somewhere else - but where?
+maybeLineOverride:: String -> Int -> (String, Int)
+maybeLineOverride parents filename offset = case parents of
+    [] -> (filename, offset)
+    [xs: LineOverride "" lineOffset] -> (filename, lineOffset)
+    [xs: LineOverride newFilename lineOffset] -> (newFilename, lineOffset)
+    [xs::_] -> maybeLineOverride xs filename offset
+
+
+-- maybeOverridePos:: Position -> Position -> (Position, Position)
+maybeOverridePos params startPos endPos = 
+    (newPosition {
+        posFile = filename,
+        posLine = posLine startPos - lineOffset,
+        posColumn = posColumn startPos
+    },
+    newPosition {
+        posFIle = filename,
+        posLine = posLine endPos - lineOffset,
+        posColumn = posColumn endPos
+    })
+    where
+        parents = parentMap params
+        (filename, lineOffset) = maybeLineOverride (getPath parents) (posFile startPos) 0
+
+
 -- !!PDS Should we translate here?  Ideally we don't want to walk backwarks
 --       throught he annotations list though.
 --       End position would be:
@@ -45,32 +71,18 @@ import Test.QuickCheck.All
 --       - SourceOverride  - apply none
 --       But where do we store the annotations?
 --       We need the current Context and then scan for the last LineOverride.
-_tokenToPosition startMap t = fromMaybe fail $ do
+tokenToPosition startMap t spec = fromMaybe fail $ do
     span <- Map.lookup (tcId t) startMap
     return $ newPositionedComment {
-        pcStartPos = fst span,
-        pcEndPos = snd span,
+        pcStartPos = startPos,
+        pcEndPos = endPos,
         pcComment = tcComment t,
         pcFix = tcFix t
     }
   where
     fail = error "Internal shellcheck error: id doesn't exist. Please report!"
-
-# overridePos:: Position -> Position
-# overridePos rawPos =
-#     newPosition {
-#         posFile = newFile,
-#         posLine = newLine,
-#         posColumn = posLine rawPos
-#     }
-#     where
-#         newFile, newLine = case ???
-#     
-#     case annotation:
-# 
-#         Nothing:
-#         Maybe LineOverride:
-# 
+    params = makeParameters spec
+    (startpos, endPos) = maybeOverridePos params (fst span) (snd span)
 
 -- !!PDS: See below.  We want to walk up the tree of tokens in the same manner
 --        except that we want to stop at the first LineOverride.  We probably don't
@@ -114,16 +126,7 @@ __filterByAnnotation asSpec params =
     -- cCode gets the code from a Comment
     getCode = cCode . tcComment
 
-# -- !!PDS: Move this to ASTLib.hs later.
-# -- Is this a T_Annotation that ignores a specific code?
-# __isAnnotationOverridingLine fileName line =
-#     case t of
-#         T_Annotation _ anns _ -> overrideLine filename line
-#         _ -> (fileName, line)
-#   where
-#     overrideLine (LineOverride overFileName lineOffset) = (overFileName, line - lineOffset)
-#     overrideLine  _                                     = fileName, line)
-# 
+
 -- Is this a T_Annotation that ignores a specific code?
                            -- An error code
                                 -- A token
@@ -142,21 +145,18 @@ __isAnnotationIgnoringCode code t =
 
 
 
-tokenToPosition startMap t = fromMaybe fail $ do
+_tokenToPosition startMap t = fromMaybe fail $ do
     span <- Map.lookup (tcId t) startMap
     return $ newPositionedComment {
-        pcStartPos = startPos,
-        pcEndPos = endPos,
+        pcStartPos = fst span,
+        pcEndPos = snd span,
         pcComment = tcComment t,
         pcFix = tcFix t
     }
   where
     fail = error "Internal shellcheck error: id doesn't exist. Please report!"
-    startPos = overridePos (fst span)
-    endPos = overridePos (snd span)
 
 
-?????????????
 -- Both pcStartPost and pcEndPos will contain filename and line numbers
 -- so need to be changed/offsetted.  This means we need to create copies
 -- where the filename and line number might be modified.
@@ -223,7 +223,8 @@ checkScript sys spec = do
         --        But where does the filename come from?  Both start and end positions
         --        contain the filename!  So tokenToposition sets it up and perhaps
         --        that is where we should translate?
-        let translator = tokenToPosition tokenPositions
+        -- let translator = tokenToPosition tokenPositions
+        let translator = tokenToPosition tokenPositions spec
         return . nub . sortMessages . filter shouldInclude $
             (parseMessages ++ map translator analysisMessages)
 
