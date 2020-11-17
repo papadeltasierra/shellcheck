@@ -53,3 +53,4 @@ optionalChecks = mconcat $ [
     ShellCheck.Analytics.optionalChecks,
     ShellCheck.Checks.Commands.optionalChecks
     ]
+

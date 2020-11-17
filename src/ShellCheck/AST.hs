@@ -150,7 +150,7 @@ data Annotation =
     | SourceOverride String
     | ShellOverride String
     | SourcePath String
-    | LineOverride String Int
+    | LineOverride String Integer
     deriving (Show, Eq)
 data ConditionType = DoubleBracket | SingleBracket deriving (Show, Eq)
 

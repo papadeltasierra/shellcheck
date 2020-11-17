@@ -37,30 +37,9 @@ import Control.Monad
 
 import Test.QuickCheck.All
 
--- !!PDS: Need to move this somewhere else - but where?
-maybeLineOverride:: String -> Int -> (String, Int)
-maybeLineOverride parents filename offset = case parents of
-    [] -> (filename, offset)
-    [xs: LineOverride "" lineOffset] -> (filename, lineOffset)
-    [xs: LineOverride newFilename lineOffset] -> (newFilename, lineOffset)
-    [xs::_] -> maybeLineOverride xs filename offset
 
 
--- maybeOverridePos:: Position -> Position -> (Position, Position)
-maybeOverridePos params startPos endPos = 
-    (newPosition {
-        posFile = filename,
-        posLine = posLine startPos - lineOffset,
-        posColumn = posColumn startPos
-    },
-    newPosition {
-        posFIle = filename,
-        posLine = posLine endPos - lineOffset,
-        posColumn = posColumn endPos
-    })
-    where
-        parents = parentMap params
-        (filename, lineOffset) = maybeLineOverride (getPath parents) (posFile startPos) 0
+
 
 
 -- !!PDS Should we translate here?  Ideally we don't want to walk backwarks
@@ -82,81 +61,14 @@ tokenToPosition startMap t spec = fromMaybe fail $ do
   where
     fail = error "Internal shellcheck error: id doesn't exist. Please report!"
     params = makeParameters spec
-    (startpos, endPos) = maybeOverridePos params (fst span) (snd span)
+    parents = parentMap params
+    parentPaths = getPath parents
+    (startPos, endPos) = maybeOverridePos parentPaths (fst span) (snd span)
 
 -- !!PDS: See below.  We want to walk up the tree of tokens in the same manner
 --        except that we want to stop at the first LineOverride.  We probably don't
 --        want a filter but if we use recursion, we should be able to stop at the
 --        top OR the first LineOverride that we hit.    
-
-
-__filterByAnnotation asSpec params =
-    -- shouldIgnore returns TRUE to indicate "do filter out" but filter() wants to
-    -- see TRUE to "do keep (NOT filter out)" thus the "not" being applied here.
-    filter (not . shouldIgnore)
-  where  
-    token = asScript asSpec
-    -- See below: "note" is a TokenComment
-    shouldIgnore note =
-        -- PDS: any acts on a list so we take a list and condition
-        --      Condition is should we ignore....
-        -- shouldIgnoreFor returns FALSE except when we decide we WILL filter out.
-        any (shouldIgnoreFor (getCode note)) $ 
-                -- List is this thing, parents?
-                -- Element and all it's parents (because disable works recursively?)
-                        -- From token to parent tokens
-                                          -- Extracting the "token ID" from the note
-                -- So we are checking all the notes for this token and all its parents
-                -- to see if we should show them.
-                getPath parents (T_Bang $ tcId note)
-
-    -- If the TokenComment is an include, off we go.
-    shouldIgnoreFor _ T_Include {} = not $ asCheckSourced asSpec
-    -- It appears that we might have a zero (0) code (so every token has a Comment!)
-                    -- This is the error code e.g. SC2048
-                         -- This is a tag; but why a tag?
-    shouldIgnoreFor code t = isAnnotationIgnoringCode code t
-
-    -- Is this walking the script tree upwards?
-    parents = parentMap params
-
-    -- We're getting the code from a comment?
-    -- "note" must be a TokenComment
-    -- tcComment gets the Comment from a TokenComment
-    -- cCode gets the code from a Comment
-    getCode = cCode . tcComment
-
-
--- Is this a T_Annotation that ignores a specific code?
-                           -- An error code
-                                -- A token
-__isAnnotationIgnoringCode code t =
-    case t of
-        -- If this is an annotation, see if we are ignoring this code
-        T_Annotation _ anns _ -> any hasNum anns
-        -- If this is not an anntation, we are NOT ignoring this code.
-        _ -> False
-  where
-    -- For a DisableComment, check further
-    hasNum (DisableComment from to) = code >= from && code < to
-    -- For a non DisableComment, we are NOT ignoring
-    hasNum _                   = False
-
-
-
-
-_tokenToPosition startMap t = fromMaybe fail $ do
-    span <- Map.lookup (tcId t) startMap
-    return $ newPositionedComment {
-        pcStartPos = fst span,
-        pcEndPos = snd span,
-        pcComment = tcComment t,
-        pcFix = tcFix t
-    }
-  where
-    fail = error "Internal shellcheck error: id doesn't exist. Please report!"
-
-
 -- Both pcStartPost and pcEndPos will contain filename and line numbers
 -- so need to be changed/offsetted.  This means we need to create copies
 -- where the filename and line number might be modified.

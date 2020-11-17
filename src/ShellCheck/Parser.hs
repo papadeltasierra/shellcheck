@@ -1118,7 +1118,10 @@ readAnnotationWithoutPrefix = do
                 char ':' <|> fail "Expected ':' after filename"
                 ioLine <- many1 digit
                 let fileName = ioFileName
-                    lineOffset = read ioLine - sourceLine(keyPos)
+                    lineOffset3 = (read ioLine::Integer)
+                    lineOffset2 = fromIntegral $ sourceLine keyPos
+                    lineOffset = lineOffset3 - lineOffset2
+                    -- lineOffset = (read ioLine::Integer) - fromIntegral $ sourceLine keyPos
                 return [LineOverride fileName lineOffset]
 
             _ -> do
@@ -3614,3 +3617,29 @@ tryWithErrors parser = do
 
 return []
 runTests = $quickCheckAll
+
+
+-- !!PDS: Need to move this somewhere else - but where?
+-- maybeLineOverride:: String -> Int -> (String, Int)
+maybeLineOverride parents filename offset = case parents of
+    [] -> (filename, offset)
+    xs -> case (last xs) of
+        LineOverride "" lineOffset -> (filename, lineOffset)
+        LineOverride newFilename lineOffset -> (newFilename, lineOffset)
+        _ -> maybeLineOverride (init xs) filename offset
+
+
+-- maybeOverridePos:: Position -> Position -> (Position, Position)
+maybeOverridePos parentPaths startPos endPos = 
+    (newPosition {
+        posFile = filename,
+        posLine = posLine startPos - lineOffset,
+        posColumn = posColumn startPos
+    },
+    newPosition {
+        posFile = filename,
+        posLine = posLine endPos - lineOffset,
+        posColumn = posColumn endPos
+    })
+    where
+        (filename, lineOffset) = maybeLineOverride parentPaths (posFile startPos) 0
